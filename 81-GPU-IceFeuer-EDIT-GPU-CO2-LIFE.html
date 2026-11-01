@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>81_GPU_IceFeuer_EDIT · GPU CO2 LIFE · Dr=81 · 730 FREI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#02060a;overflow:hidden;font-family:ui-monospace,JetBrains Mono,monospace}
+#cv{position:fixed;inset:0;width:100%;height:100%;cursor:crosshair}
+#hud{position:fixed;left:12px;top:12px;z-index:10;color:rgba(199,249,255,.7);font-size:10px;line-height:1.7;letter-spacing:.1em;pointer-events:none;
+background:rgba(2,6,10,.65);border:1px solid rgba(0,204,255,.22);padding:12px 14px;border-radius:12px;backdrop-filter:blur(10px);min-width:320px}
+#hud b{color:#ffd700}
+#hud .ice{color:#00ccff} #hud .fire{color:#ff7a45} #hud .water{color:#2af} #hud .life{color:#32d583} #hud .co2{color:#aaa}
+#ctrl{position:fixed;right:12px;top:12px;z-index:10;display:flex;flex-direction:column;gap:6px}
+#ctrl button{pointer-events:auto;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.1em;padding:8px 12px;border:1px solid rgba(255,215,0,.2);background:rgba(10,18,32,.9);color:#ffd700;cursor:pointer;border-radius:8px;backdrop-filter:blur(6px);transition:.15s}
+#ctrl button:hover{background:#ffd700;color:#000;border-color:#ffd700;box-shadow:0 0 18px rgba(255,215,0,.3)}
+#ctrl button.active{background:#ffd700;color:#000}
+#ctrl button.ice{border-color:rgba(0,204,255,.4);color:#00ccff} #ctrl button.ice.active{background:#00ccff;color:#000}
+#ctrl button.water{border-color:rgba(42,150,255,.4);color:#2a96ff} #ctrl button.water.active{background:#2a96ff;color:#fff}
+#ctrl button.fire{border-color:rgba(255,122,69,.4);color:#ff7a45} #ctrl button.fire.active{background:#ff7a45;color:#000}
+#ctrl button.life{border-color:rgba(50,213,131,.4);color:#32d583} #ctrl button.life.active{background:#32d583;color:#000}
+#bar{position:fixed;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#00ccff,#2a96ff,#ffd700,#ff7a45);opacity:.7;pointer-events:none}
+#bar2{position:fixed;bottom:4px;left:0;right:0;height:18px;display:flex;gap:0;z-index:5;pointer-events:none}
+#bar2 div{height:100%;transition:width .3s}
+#stats{position:fixed;left:12px;bottom:30px;z-index:10;display:flex;gap:8px;pointer-events:none}
+#stats div{font-size:9px;padding:4px 8px;border-radius:6px;background:rgba(2,6,10,.6);border:1px solid rgba(255,255,255,.08);color:#8aa0c0}
+#stats b{color:#fff}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">
+<b>81_GPU_IceFeuer_EDIT · GPU CO2↔LIFE</b> · Dr=81 LS_City_Desert · H=3 B=27 T=81<br>
+<span class="ice">❄ ICE DRY-ICE</span> + <span class="fire">🔥 FIRE IGNITE</span> + <span class="water">💧 WATER VERWASSERN</span> → <span class="life">LIFE</span><br>
+<span class="co2">CO₂</span>=<b id="co2">420</b>ppm · H₂O=<b id="h2o">81</b> · LIFE=<b id="life">0</b> · UNLIFE=<b id="unlife">0</b> · FIRE=<b id="fire">0</b><br>
+bio_root=<span id="br">2142</span> · atom=<span id="at">81</span> · gamma=<span id="ga">1.73</span> · T=<span id="tt">0.0</span>° · Q9=19683<br>
+<span style="color:#ffd70066">0⊃3⊃9⊃27⊃81⊃243⊃729→730 FREI · P=U·I · GPU INSTANCED 729</span>
+</div>
+<div id="ctrl">
+<button id="b-ice" class="ice">❄ VEREISEN (γ&lt;1.5)</button>
+<button id="b-water" class="water">💧 VERWASSERN (1.6-1.9)</button>
+<button id="b-ignite" class="fire">🔥 ZÜNDEN (γ&gt;2.0)</button>
+<button id="b-life" class="life">🌱 LIFE↔UNLIFE AUTO</button>
+<button id="b-auto">🌀 CO₂ ECONOMY AUTO</button>
+<button id="b-reset">⟲ RESET 81→729</button>
+</div>
+<div id="stats">
+<div>CO₂ Δ <b id="dco2">0</b></div><div>H₂O Δ <b id="dh2o">0</b></div><div>LIFE RATE <b id="dlife">0</b>/s</div><div>GPU <b id="gpu">81</b> particles</div>
+</div>
+<div id="bar"></div><div id="bar2"><div id="b-co2" style="background:#666;width:42%"></div><div id="b-h2o" style="background:#2a96ff;width:10%"></div><div id="b-life" style="background:#32d583;width:0%"></div><div id="b-fire" style="background:#ff7a45;width:5%"></div><div id="b-iceb" style="background:#00ccff;width:10%"></div></div>
+
+<script>
+// CTRL.ler BUS ÜBER 4 WELTEN — PATCHED mit CO2/H2O/LIFE
+(function(){
+  var listeners=[]; var lastState={bio_root:2142,atom:81,gamma:1.73,co2:420,h2o:81,life:0,unlife:0,fire:0,temp:15};
+  function fire(diff){ if(!diff||typeof diff!=='object') return; for(var k in diff) lastState[k]=diff[k];
+    for(var i=0;i<listeners.length;i++){try{listeners[i](lastState,diff);}catch(e){}}
+    try{window.dispatchEvent(new CustomEvent('ctrl:patch',{detail:diff}));}catch(e){}
+  }
+  window.addEventListener('message',function(e){var d=e.data;if(!d)return;
+    if(d.type==='ctrl:init'&&d.state){lastState=Object.assign({},d.state);fire(lastState);try{window.parent.postMessage({type:'ctrl:hello-ack'},'*');}catch(e){}return;}
+    if(d.type==='ctrl:patch'&&d.diff){fire(d.diff);}
+  });
+  window.CTRL={get:function(k){return lastState[k];},getAll:function(){return Object.assign({},lastState);},
+    set:function(k,v){var d={};d[k]=v;fire(d);try{window.parent.postMessage({type:'ctrl:patch',diff:d,source:'child'},'*');}catch(e){}},
+    emit:function(diff){fire(diff);try{window.parent.postMessage({type:'ctrl:patch',diff:diff,source:'child'},'*');}catch(e){}},
+    on:function(fn){listeners.push(fn);},off:function(fn){var i=listeners.indexOf(fn);if(i>=0)listeners.splice(i,1);}};
+  try{window.parent.postMessage({type:'ctrl:hello'},'*');}catch(e){}
+})();
+
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d',{alpha:false,desynchronized:true});
+let dpr=Math.min(2,devicePixelRatio||1);
+function resize(){dpr=Math.min(2,devicePixelRatio||1);cv.width=innerWidth*dpr;cv.height=innerHeight*dpr;cv.style.width=innerWidth+'px';cv.style.height=innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);}
+resize();addEventListener('resize',resize);
+
+// === GPU ECONOMY — 729 = 81*9 = Q4 — 3^6 ===
+const N_GPU = 729; // 81*9, GPU instanced
+const N_VIS = 81;  // visual core
+const parts = new Float32Array(N_GPU*8); // x,y,vx,vy,r,state,phase,age
+const states = new Uint8Array(N_GPU); // 0=CO2,1=ICE,2=H2O,3=LIFE,4=UNLIFE,5=FIRE
+
+const STATE={CO2:0,ICE:1,H2O:2,LIFE:3,UNLIFE:4,FIRE:5};
+const STATE_COLOR={
+  0:{fill:'rgba(160,160,160,0.8)',glow:'rgba(160,160,160,0.3)',shape:'dot'},
+  1:{fill:'rgba(199,249,255,0.95)',glow:'rgba(0,204,255,0.7)',shape:'hex'},
+  2:{fill:'rgba(42,150,255,0.9)',glow:'rgba(42,150,255,0.6)',shape:'circle'},
+  3:{fill:'rgba(50,213,131,0.9)',glow:'rgba(50,213,131,0.6)',shape:'tri'},
+  4:{fill:'rgba(120,80,40,0.7)',glow:'rgba(120,80,40,0.2)',shape:'square'},
+  5:{fill:'rgba(255,215,120,0.95)',glow:'rgba(255,122,69,0.8)',shape:'flame'}
+};
+
+function initGPU(){
+  for(let i=0;i<N_GPU;i++){
+    let idx=i*8;
+    parts[idx]=Math.random()*innerWidth; // x
+    parts[idx+1]=Math.random()*innerHeight; // y
+    parts[idx+2]=(Math.random()-0.5)*1.4; // vx
+    parts[idx+3]=(Math.random()-0.5)*1.4; // vy
+    parts[idx+4]=1.5+Math.random()*5; // r
+    parts[idx+5]=0; // state set via states array
+    parts[idx+6]=Math.random()*Math.PI*2; // phase
+    parts[idx+7]=0; // age
+    // distribution: 42% CO2, 15% H2O, 15% ICE, 10% FIRE, 10% LIFE, 8% UNLIFE
+    let r=Math.random();
+    if(r<0.42) states[i]=STATE.CO2;
+    else if(r<0.57) states[i]=STATE.H2O;
+    else if(r<0.72) states[i]=STATE.ICE;
+    else if(r<0.82) states[i]=STATE.FIRE;
+    else if(r<0.92) states[i]=STATE.LIFE;
+    else states[i]=STATE.UNLIFE;
+  }
+}
+initGPU();
+
+// Economy
+let economy={co2:420,h2o:81,life:0,unlife:0,fire:0,ice:0,co2_delta:0,h2o_delta:0,life_rate:0};
+let t=0, bio_root=2142, atom=81, gamma=1.73, temp=15;
+let autoMode=false, lifeAuto=false;
+
+function updateHUD(){
+  document.getElementById('co2').textContent=Math.round(economy.co2);
+  document.getElementById('h2o').textContent=Math.round(economy.h2o);
+  document.getElementById('life').textContent=Math.round(economy.life);
+  document.getElementById('unlife').textContent=Math.round(economy.unlife);
+  document.getElementById('fire').textContent=Math.round(economy.fire);
+  document.getElementById('br').textContent=Math.round(bio_root);
+  document.getElementById('at').textContent=Math.round(atom);
+  document.getElementById('ga').textContent=gamma.toFixed(2);
+  document.getElementById('tt').textContent=temp.toFixed(1);
+  document.getElementById('dco2').textContent=(economy.co2_delta>0?'+':'')+economy.co2_delta.toFixed(1);
+  document.getElementById('dh2o').textContent=(economy.h2o_delta>0?'+':'')+economy.h2o_delta.toFixed(1);
+  document.getElementById('dlife').textContent=economy.life_rate.toFixed(2);
+  document.getElementById('gpu').textContent=N_GPU;
+  // bars
+  let total=economy.co2+economy.h2o+economy.life+economy.unlife+economy.fire+economy.ice+1;
+  document.getElementById('b-co2').style.width=(economy.co2/total*100).toFixed(1)+'%';
+  document.getElementById('b-h2o').style.width=(economy.h2o/total*100).toFixed(1)+'%';
+  document.getElementById('b-life').style.width=(economy.life/total*100).toFixed(1)+'%';
+  document.getElementById('b-fire').style.width=(economy.fire/total*100).toFixed(1)+'%';
+  document.getElementById('b-iceb').style.width=(economy.ice/total*100).toFixed(1)+'%';
+}
+
+if(window.CTRL){
+ CTRL.on(function(all,diff){
+  if('bio_root' in all) bio_root=all.bio_root;
+  if('atom' in all) atom=all.atom;
+  if('gamma' in all) gamma=all.gamma;
+  if('co2' in all) economy.co2=all.co2;
+  if('h2o' in all) economy.h2o=all.h2o;
+  if('life' in all) economy.life=all.life;
+  if('unlife' in all) economy.unlife=all.unlife;
+  if('temp' in all) temp=all.temp;
+  updateHUD();
+ });
+}
+
+// === CORE TRANSITIONS — GPU ===
+function vereisen(){ // FREEZE: CO2 → ICE (dry ice), H2O → ICE
+  gamma = Math.max(0.8, gamma-0.25);
+  temp -= 3;
+  let changed=0;
+  for(let i=0;i<N_GPU;i++){
+    if(states[i]===STATE.CO2 && Math.random()<0.4){ states[i]=STATE.ICE; changed++; economy.co2-=0.2; economy.ice++; }
+    if(states[i]===STATE.H2O && Math.random()<0.3){ states[i]=STATE.ICE; changed++; }
+  }
+  economy.co2_delta=-changed*0.2;
+  spawnBurst(innerWidth/2,innerHeight/2,24,true);
+  if(window.CTRL) CTRL.emit({gamma:gamma,temp:temp,co2:economy.co2,ice:economy.ice});
+}
+function verwassern(){ // WATER: CO2 + H2O → LIFE (photosynthesis)
+  gamma = 1.65 + Math.random()*0.2;
+  temp = 18 + Math.random()*4;
+  let lifeCreated=0;
+  // find CO2 near H2O
+  for(let i=0;i<N_GPU;i++){
+    if(states[i]!==STATE.CO2) continue;
+    for(let j=0;j<12;j++){
+      let k = (i + j*67)%N_GPU;
+      if(states[k]===STATE.H2O && Math.random()<0.08){
+        states[i]=STATE.LIFE;
+        states[k]=STATE.H2O; // catalyst, stays
+        lifeCreated++;
+        economy.co2-=0.5;
+        economy.life+=1;
+        economy.h2o-=0.1;
+        break;
+      }
+    }
+  }
+  economy.life_rate=lifeCreated*2;
+  economy.co2_delta=-lifeCreated*0.5;
+  spawnBurst(innerWidth/2,innerHeight/2,18,false);
+  if(window.CTRL) CTRL.emit({gamma:gamma,temp:temp,co2:economy.co2,h2o:economy.h2o,life:economy.life});
+}
+function zuenden(){ // IGNITE: LIFE/ICE → FIRE → CO2 + heat, UNLIFE → FIRE
+  gamma = Math.min(2.8, gamma+0.35);
+  temp += 5;
+  let co2Released=0, fireCount=0;
+  for(let i=0;i<N_GPU;i++){
+    if(states[i]===STATE.LIFE && Math.random()<0.5){ states[i]=STATE.FIRE; co2Released+=0.3; economy.life-=1; economy.unlife+=0.2; }
+    else if(states[i]===STATE.ICE && Math.random()<0.3){ states[i]=STATE.CO2; co2Released+=0.6; economy.ice--; }
+    else if(states[i]===STATE.UNLIFE && Math.random()<0.4){ states[i]=STATE.FIRE; fireCount++; }
+    else if(states[i]===STATE.FIRE && parts[i*8+7]>60 && Math.random()<0.5){ states[i]=STATE.CO2; co2Released+=1.0; economy.fire--; }
+  }
+  economy.co2+=co2Released;
+  economy.fire+=fireCount;
+  economy.co2_delta=co2Released;
+  spawnBurst(innerWidth/2,innerHeight/2,32,false);
+  if(window.CTRL) CTRL.emit({gamma:gamma,temp:temp,co2:economy.co2,fire:economy.fire,unlife:economy.unlife});
+}
+function lifeUnlifeCycle(){
+  // LIFE → UNLIFE naturally, UNLIFE → CO2 slowly
+  for(let i=0;i<N_GPU;i++){
+    if(states[i]===STATE.LIFE && Math.random()<0.003){ states[i]=STATE.UNLIFE; economy.life--; economy.unlife++; }
+    if(states[i]===STATE.UNLIFE && Math.random()<0.002){ states[i]=STATE.CO2; economy.unlife--; economy.co2+=0.3; }
+  }
+}
+
+let bursts=[];
+function spawnBurst(x,y,n,isIce){
+  for(let i=0;i<n;i++){
+    bursts.push({x:x,y:y,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,life:0,max:20+Math.random()*20,ice:isIce});
+  }
+}
+
+function raf(){
+ t+=0.016;
+ const w=innerWidth,h=innerHeight;
+ // === GPU BACKGROUND — temp dependent ===
+ const cold = Math.max(0,Math.min(1, (2.2 - gamma)/1.4 )); // 0 hot, 1 cold
+ const wet = Math.max(0,Math.min(1, 1 - Math.abs(gamma-1.75)*2 ));
+ temp += ( (gamma*15 -5) - temp)*0.02;
+
+ const g=ctx.createLinearGradient(0,0,0,h);
+ g.addColorStop(0, `rgba(0,${Math.round(10+cold*40+wet*30)},${Math.round(20+cold*90+wet*40)},1)`);
+ g.addColorStop(0.35, `rgba(${Math.round((1-cold)*10+wet*5)},${Math.round(4+wet*20)},${Math.round(8+cold*30+wet*20)},1)`);
+ g.addColorStop(0.7, `rgba(${Math.round((1-cold)*60+wet*10+20)},${Math.round((1-cold)*30+wet*10)},${Math.round(cold*15+5)},1)`);
+ g.addColorStop(1, `rgba(${Math.round((1-cold)*140+20)},${Math.round((1-cold)*50+5)},${Math.round(cold*10+2)},1)`);
+ ctx.fillStyle=g;
+ ctx.fillRect(0,0,w,h);
+
+ // grid faint
+ ctx.strokeStyle='rgba(255,215,0,0.03)'; ctx.lineWidth=1;
+ for(let i=0;i<w;i+=56){ ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+ for(let i=0;i<h;i+=56){ ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
+
+ // 3 RINGS Durchgang 0⊃3⊃9⊃81⊃243⊃729→730 FREI
+ ctx.save(); ctx.translate(w/2,h/2-12);
+ for(let ring=0;ring<3;ring++){
+  const rad = 62+ring*78 + Math.sin(t*0.5+ring)*5;
+  ctx.beginPath();
+  for(let i=0;i<81;i++){
+   const ang = (i/81)*Math.PI*2 + t*0.08*(ring+1)*(ring%2?1:-1) + Math.sin(t*0.2+ring)*0.1;
+   const r = rad + Math.sin(t*0.7+parts[i*8+6])*9;
+   const x = Math.cos(ang)*r, y=Math.sin(ang)*r;
+   if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = ring===0 ? `rgba(0,204,255,${0.07+cold*0.12})` : ring===1 ? `rgba(42,150,255,${0.05+wet*0.12})` : `rgba(255,122,69,${0.04+(1-cold)*0.14})`;
+  ctx.lineWidth=1.2; ctx.stroke();
+  // 9er ticks
+  for(let i=0;i<9;i++){
+   const ang=i/9*Math.PI*2; ctx.beginPath(); ctx.arc(Math.cos(ang)*rad, Math.sin(ang)*rad, 2,0,Math.PI*2); ctx.fillStyle=ring===0?'#00ccff':ring===1?'#2a96ff':'#ff7a45'; ctx.fill();
+  }
+ }
+ ctx.restore();
+
+ // === GPU PARTICLES — 729 instanced ===
+ let cnt={co2:0,h2o:0,life:0,unlife:0,fire:0,ice:0};
+ for(let i=0;i<N_GPU;i++){
+  let idx=i*8;
+  parts[idx]+=parts[idx+2]*(0.4+gamma*0.6);
+  parts[idx+1]+=parts[idx+3]*(0.4+gamma*0.6);
+  parts[idx+6]+=0.02+gamma*0.01;
+  parts[idx+7]+=1;
+
+  if(parts[idx]<0||parts[idx]>w) parts[idx+2]*=-1;
+  if(parts[idx+1]<0||parts[idx+1]>h) parts[idx+3]*=-1;
+
+  // state
+  let st=states[i];
+  if(st===0) cnt.co2++; else if(st===1) cnt.ice++; else if(st===2) cnt.h2o++; else if(st===3) cnt.life++; else if(st===4) cnt.unlife++; else if(st===5) cnt.fire++;
+
+  // auto transition based on gamma
+  if(autoMode){
+    if(gamma<1.45 && st===STATE.CO2 && Math.random()<0.01){ states[i]=STATE.ICE; }
+    if(gamma>2.05 && st===STATE.LIFE && Math.random()<0.015){ states[i]=STATE.FIRE; }
+    if(gamma>1.6 && gamma<1.9 && st===STATE.CO2){
+      // find nearby H2O for life creation — cheap check
+      if(cnt.h2o>10 && Math.random()<0.005){ states[i]=STATE.LIFE; cnt.life++; }
+    }
+    if(st===STATE.FIRE && parts[idx+7]>80 && Math.random()<0.02){ states[i]=STATE.CO2; }
+  }
+  if(lifeAuto) lifeUnlifeCycle();
+
+  // draw — GPU style
+  const col=STATE_COLOR[st];
+  const glow = (st===STATE.FIRE? 14+Math.sin(t*3+parts[idx+6])*6 : 10+Math.sin(t*2+parts[idx+6])*3) * (dpr>1?1.2:1);
+  ctx.shadowBlur=glow;
+  ctx.shadowColor=col.glow;
+  ctx.fillStyle=col.fill;
+  ctx.beginPath();
+  let x=parts[idx], y=parts[idx+1], r=parts[idx+4];
+  if(st===STATE.CO2){
+    ctx.arc(x,y,r*0.7,0,Math.PI*2);
+  }else if(st===STATE.ICE){
+    for(let k=0;k<6;k++){ let a=k/6*Math.PI*2+parts[idx+6]; let rx=Math.cos(a)*r, ry=Math.sin(a)*r; if(k===0) ctx.moveTo(x+rx,y+ry); else ctx.lineTo(x+rx,y+ry); } ctx.closePath();
+  }else if(st===STATE.H2O){
+    ctx.arc(x,y,r*0.9,0,Math.PI*2);
+  }else if(st===STATE.LIFE){
+    ctx.moveTo(x,y-r); ctx.lineTo(x-r*0.86,y+r*0.5); ctx.lineTo(x+r*0.86,y+r*0.5); ctx.closePath();
+  }else if(st===STATE.UNLIFE){
+    ctx.rect(x-r*0.6,y-r*0.6,r*1.2,r*1.2);
+  }else if(st===STATE.FIRE){
+    ctx.moveTo(x,y-r*1.2); ctx.bezierCurveTo(x+r*0.8,y-r*0.2,x+r*0.5,y+r*0.8,x,y+r); ctx.bezierCurveTo(x-r*0.5,y+r*0.8,x-r*0.8,y-r*0.2,x,y-r*1.2);
+  }
+  ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Q9 links — 9er Sprünge
+  if(i%9===0 && Math.random()<0.06){
+   let j=(i+9)%N_GPU;
+   let jdx=j*8;
+   ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(parts[jdx],parts[jdx+1]);
+   ctx.strokeStyle = st===STATE.ICE ? 'rgba(0,204,255,0.06)' : st===STATE.H2O ? 'rgba(42,150,255,0.06)' : st===STATE.LIFE ? 'rgba(50,213,131,0.05)' : st===STATE.FIRE ? 'rgba(255,122,69,0.07)' : 'rgba(160,160,160,0.03)';
+   ctx.lineWidth=0.8; ctx.stroke();
+  }
+ }
+
+ // bursts
+ for(let i=bursts.length-1;i>=0;i--){
+  let b=bursts[i]; b.x+=b.vx; b.y+=b.vy; b.life++; b.vy+=0.08;
+  if(b.life>b.max){ bursts.splice(i,1); continue; }
+  let a=1-b.life/b.max;
+  ctx.fillStyle=b.ice?`rgba(199,249,255,${a})`:`rgba(255,215,120,${a})`;
+  ctx.beginPath(); ctx.arc(b.x,b.y,2*a*2,0,Math.PI*2); ctx.fill();
+ }
+
+ // center 730 FREI
+ ctx.save(); ctx.translate(w/2,h/2-12);
+ ctx.fillStyle='rgba(2,6,10,0.72)'; ctx.beginPath(); ctx.arc(0,0,42,0,Math.PI*2); ctx.fill();
+ ctx.strokeStyle= cold>0.5 ? 'rgba(0,204,255,0.7)' : wet>0.5 ? 'rgba(42,150,255,0.7)' : 'rgba(255,122,69,0.7)'; ctx.lineWidth=2.2; ctx.stroke();
+ ctx.fillStyle= cold>0.6 ? '#00ccff' : wet>0.6 ? '#2a96ff' : '#ff7a45';
+ ctx.font='22px ui-monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+ ctx.fillText(cold>0.6 ? '❄' : wet>0.6 ? '💧' : gamma>2.0 ? '🔥' : '🌱',0,1);
+ ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='9px ui-monospace'; ctx.fillText('730 FREI',0,22);
+ ctx.restore();
+
+ // economy smoothing
+ economy.co2 = economy.co2*0.995 + cnt.co2*0.005* (420/ (N_GPU*0.4));
+ // keep counts for HUD, but real economy is separate ppm
+ economy.ice = cnt.ice; economy.h2o = cnt.h2o; economy.life = economy.life*0.98 + cnt.life*0.02; economy.unlife = cnt.unlife; economy.fire = cnt.fire;
+
+ if(t%0.5<0.016) updateHUD();
+
+ // auto emit to BUS
+ if(t%1<0.016 && window.CTRL && autoMode){
+  CTRL.emit({gamma:gamma,temp:temp,co2:economy.co2,h2o:economy.h2o,life:economy.life,unlife:economy.unlife,fire:economy.fire,ice:economy.ice});
+ }
+
+ requestAnimationFrame(raf);
+}
+requestAnimationFrame(raf);
+
+// === CONTROLS ===
+document.getElementById('b-ice').onclick=()=>{ vereisen(); document.getElementById('b-ice').classList.add('active'); setTimeout(()=>document.getElementById('b-ice').classList.remove('active'),400); };
+document.getElementById('b-water').onclick=()=>{ verwassern(); document.getElementById('b-water').classList.add('active'); setTimeout(()=>document.getElementById('b-water').classList.remove('active'),400); };
+document.getElementById('b-ignite').onclick=()=>{ zuenden(); document.getElementById('b-ignite').classList.add('active'); setTimeout(()=>document.getElementById('b-ignite').classList.remove('active'),400); };
+document.getElementById('b-life').onclick=(e)=>{
+  lifeAuto=!lifeAuto; e.target.classList.toggle('active',lifeAuto); e.target.textContent=lifeAuto?'🌱 LIFE AUTO ON':'🌱 LIFE↔UNLIFE AUTO';
+};
+document.getElementById('b-auto').onclick=(e)=>{
+  autoMode=!autoMode; e.target.classList.toggle('active',autoMode);
+  if(autoMode) gamma=1.73;
+};
+document.getElementById('b-reset').onclick=()=>{ initGPU(); economy={co2:420,h2o:81,life:0,unlife:0,fire:0,ice:0,co2_delta:0,h2o_delta:0,life_rate:0}; gamma=1.73; temp=15; };
+
+cv.addEventListener('click',(ev)=>{
+  let x=ev.clientX, y=ev.clientY;
+  // local phase change: click = opposite state
+  for(let i=0;i<30;i++){
+    let idx = Math.floor(Math.random()*N_GPU);
+    let dx=parts[idx*8]-x, dy=parts[idx*8+1]-y;
+    if(dx*dx+dy*dy<120*120){
+      let st=states[idx];
+      if(st===STATE.CO2) states[idx]=STATE.LIFE;
+      else if(st===STATE.LIFE) states[idx]=STATE.FIRE;
+      else if(st===STATE.FIRE) states[idx]=STATE.CO2;
+      else if(st===STATE.ICE) states[idx]=STATE.H2O;
+      else if(st===STATE.H2O) states[idx]=STATE.LIFE;
+      else states[idx]=STATE.CO2;
+    }
+  }
+  // cycle gamma on click
+  if(gamma<1.5){ gamma=1.75; } else if(gamma<1.9){ gamma=2.2; } else { gamma=1.2; }
+  if(window.CTRL) CTRL.set('gamma',gamma);
+});
+
+// keyboard: 1=ice 2=water 3=fire
+addEventListener('keydown',(e)=>{
+  if(e.key==='1') vereisen();
+  if(e.key==='2') verwassern();
+  if(e.key==='3') zuenden();
+  if(e.key===' ') { autoMode=!autoMode; document.getElementById('b-auto').classList.toggle('active',autoMode); }
+});
+
+updateHUD();
+</script>
+</body>
+</html>
